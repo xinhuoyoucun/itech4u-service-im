@@ -49,11 +49,11 @@ public class WebSocketServer {
     @OnOpen
     public void onOpen(Session session) {
         this.session = session;
-        try {
-            sendMessage("连接成功");
-        } catch (IOException e) {
-            log.error("网络异常,连接失败");
-        }
+//        try {
+//            sendMessage("连接成功");
+//        } catch (IOException e) {
+//            log.error("网络异常,连接失败");
+//        }
     }
 
     /**
@@ -87,49 +87,60 @@ public class WebSocketServer {
                     break;
                 case "user":
                     log.info("用户消息");
-                    jsonObject = jsonObject.getJSONObject("msg");
-                    //追加发送人(防止串改)
-                    String fromUserId = this.token;
-                    jsonObject.put("fromUserId", fromUserId);
-//                    String toUserId=jsonObject.getString("toUserId");
-                    String toUserId = fromUserId;
-                    //传送给对应toUserId用户的websocket
-                    if (StringUtils.isNotBlank(toUserId) && webSocketMap.containsKey(toUserId)) {
-                        webSocketMap.get(toUserId).sendMessage(jsonObject.toJSONString());
-                    } else {
-                        log.error("请求的userId:" + toUserId + "不在该服务器上");
-                        //否则不在这个服务器上，发送到mysql或者redis
-                    }
+                    handleMessage(jsonObject);
                     break;
                 case "login":
                     log.info("登录消息");
                     String token = jsonObject.getJSONObject("msg").getString("token");
-                    this.token = token;
-                    if (webSocketMap.containsKey(token)) {
-                        webSocketMap.remove(token);
-                        webSocketMap.put(token, this);
-                        //加入set中
-                    } else {
-                        //加入set中
-                        webSocketMap.put(token, this);
-                        //在线数加1
-                        addOnlineCount();
+                    if (token==null){
+                        log.warn("没有登录");
+                        break;
                     }
-                    sendMessage("登录成功");
-                    log.info("用户{}登录,当前在线人数为:{}", token, getOnlineCount());
-
+                    handleLogin(token);
                     break;
                 case "keepAlive":
                     log.debug("心跳包");
-
                     break;
                 default:
                     log.info("没有这样的消息类型");
             }
         }
+    }
 
+    private void handleMessage(JSONObject jsonObject) throws IOException {
+        JSONObject msgObject = jsonObject.getJSONObject("msg");
+        //追加发送人(防止串改)
+        String fromUserId = this.token;
+        msgObject.put("fromUserId", fromUserId);
+        //修改发送方向
+        msgObject.put("flow", "in");
+        String toUserId=msgObject.getString("toUserId");
+        //传送给对应toUserId用户的websocket
+        if (StringUtils.isNotBlank(toUserId) && webSocketMap.containsKey(toUserId)) {
+            webSocketMap.get(toUserId).sendMessage(jsonObject.toJSONString());
+        } else {
+            log.error("请求的userId:" + toUserId + "不在该服务器上");
+            //否则不在这个服务器上，发送到mysql或者redis
+        }
+    }
+
+    private void  handleLogin(String token) throws IOException {
+        this.token = token;
+        if (webSocketMap.containsKey(token)) {
+            webSocketMap.remove(token);
+            webSocketMap.put(token, this);
+            //加入set中
+        } else {
+            //加入set中
+            webSocketMap.put(token, this);
+            //在线数加1
+            addOnlineCount();
+        }
+//        sendMessage("登录成功");
+        log.info("用户{}登录,当前在线人数为:{}", token, getOnlineCount());
 
     }
+
 
     /**
      * @param session
